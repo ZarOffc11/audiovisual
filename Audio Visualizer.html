@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Audio Visualizer</title>
+<style>
+:root{--bg:#efedf6;--surface:#fff;--text:#16151f;--muted:#6a6879;--line:#dcd9e8;--accent:#5b3df5;--on-accent:#fff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#0c0b12;--surface:#171622;--text:#f2f1f8;--muted:#9b99ad;--line:#2b2939;--accent:#9a84ff;--on-accent:#120d2e}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0c0b12;--surface:#171622;--text:#f2f1f8;--muted:#9b99ad;--line:#2b2939;--accent:#9a84ff;--on-accent:#120d2e}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.app{max-width:880px;margin:0 auto;padding:20px 16px 32px;display:grid;gap:14px}
+h1{margin:0;font-size:1.5rem;letter-spacing:-.02em}
+header p{margin:2px 0 0;color:var(--muted);font-size:.95rem}
+.stage{position:relative;width:100%;aspect-ratio:16/10;max-height:62vh;border-radius:18px;overflow:hidden;background:#0d0d14;border:1px solid var(--line)}
+.stage:fullscreen{max-height:none;aspect-ratio:auto;border-radius:0;border:0}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.drop{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:20px;color:#f2f1f8;cursor:pointer;background:rgba(13,13,20,.72);border:2px dashed rgba(255,255,255,.28);border-radius:18px;margin:10px;inset:0}
+.drop.hide{display:none}
+.drop.over{border-color:#9a84ff;background:rgba(40,30,90,.8)}
+.drop .big{font-size:2.4rem;line-height:1}
+.drop strong{font-size:1.05rem}
+.drop span{font-size:.85rem;opacity:.7}
+.icon{position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:10px;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:1.1rem;cursor:pointer}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;display:grid;gap:14px}
+.now{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.now b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--text);font:inherit;font-size:.9rem;cursor:pointer;white-space:nowrap}
+.player{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center}
+.play{width:46px;height:46px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);font-size:1rem;cursor:pointer}
+.play:disabled{opacity:.4;cursor:default}
+.t{font-variant-numeric:tabular-nums;font-size:.85rem;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.row{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--muted);padding:8px 14px;font:inherit;font-size:.9rem;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--on-accent)}
+.pal{display:flex;gap:8px}
+.pal button{width:30px;height:30px;border-radius:50%;border:2px solid transparent;cursor:pointer;outline:2px solid transparent}
+.pal button[aria-pressed=true]{border-color:var(--surface);outline-color:var(--accent)}
+.vol{display:flex;align-items:center;gap:8px;min-width:130px;color:var(--muted);font-size:.85rem}
+.msg{min-height:1.2em;margin:0;font-size:.85rem;color:#d2403a}
+button:focus-visible,label:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:520px){.player{grid-template-columns:auto 1fr}.player .t{display:none}.player input{grid-column:2}}
+</style>
+</head>
+<body>
+<main class="app">
+  <header>
+    <h1>Audio Visualizer</h1>
+    <p>Unggah lagu, lihat suaranya bergerak.</p>
+  </header>
+
+  <section class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <label class="drop" id="drop" for="file">
+      <div class="big">♪</div>
+      <strong>Pilih atau tarik file audio ke sini</strong>
+      <span>MP3, WAV, OGG, M4A, FLAC</span>
+    </label>
+    <button class="icon" id="fs" title="Layar penuh" aria-label="Layar penuh">⛶</button>
+  </section>
+  <input type="file" id="file" accept="audio/*" hidden>
+
+  <section class="panel">
+    <div class="now">
+      <b id="name">Belum ada file</b>
+      <label class="btn" for="file" tabindex="0">Ganti file</label>
+    </div>
+    <div class="player">
+      <button class="play" id="play" disabled aria-label="Putar">▶</button>
+      <span class="t" id="cur">0:00</span>
+      <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Posisi lagu">
+      <span class="t" id="dur">0:00</span>
+    </div>
+    <div class="row">
+      <div class="seg" id="modes" role="group" aria-label="Gaya visual">
+        <button data-m="bars" aria-pressed="true">Batang</button>
+        <button data-m="wave" aria-pressed="false">Gelombang</button>
+        <button data-m="ring" aria-pressed="false">Lingkaran</button>
+      </div>
+      <div class="pal" id="pal" role="group" aria-label="Warna"></div>
+      <label class="vol">Volume <input type="range" id="vol" min="0" max="1" step="0.01" value="0.8"></label>
+    </div>
+    <p class="msg" id="msg" role="status"></p>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const cv = $('#cv'), g = cv.getContext('2d');
+const audio = new Audio();
+audio.preload = 'auto';
+audio.volume = 0.8;
+let ctx, analyser, freq, wave, W = 0, H = 0, D = 1, mode = 'bars', pi = 0, url = null;
+const P = [[285, 190], [8, 52], [160, 95], [205, 245]];
+
+// Palet warna
+P.forEach((p, i) => {
+  const b = document.createElement('button');
+  b.style.background = `linear-gradient(135deg,hsl(${p[0]},90%,60%),hsl(${p[1]},90%,60%))`;
+  b.setAttribute('aria-pressed', i === 0);
+  b.setAttribute('aria-label', 'Palet ' + (i + 1));
+  b.onclick = () => { pi = i; [...$('#pal').children].forEach((c, j) => c.setAttribute('aria-pressed', j === i)); };
+  $('#pal').appendChild(b);
+});
+
+// Gaya visual
+$('#modes').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  mode = b.dataset.m;
+  [...$('#modes').children].forEach(c => c.setAttribute('aria-pressed', c === b));
+};
+
+function fit() {
+  const r = cv.getBoundingClientRect();
+  D = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.max(1, r.width * D); cv.height = Math.max(1, r.height * D);
+  W = cv.width; H = cv.height;
+}
+new ResizeObserver(fit).observe(cv);
+
+function setup() {
+  if (ctx) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.8;
+  const src = ctx.createMediaElementSource(audio);
+  src.connect(analyser); analyser.connect(ctx.destination);
+  freq = new Uint8Array(analyser.frequencyBinCount);
+  wave = new Uint8Array(analyser.fftSize);
+}
+
+const col = (t, a = 1, l = 60) => {
+  const [h1, h2] = P[pi];
+  return `hsla(${h1 + (h2 - h1) * t},95%,${l}%,${a})`;
+};
+
+function bars() {
+  const n = W / D < 520 ? 40 : 72, step = W / n, bw = step * 0.72;
+  g.shadowBlur = 16 * D; g.shadowColor = col(0.5);
+  for (let i = 0; i < n; i++) {
+    const v = freq[Math.floor(Math.pow(i / n, 1.7) * freq.length * 0.65)] / 255;
+    const h = Math.max(4 * D, Math.pow(v, 1.4) * H * 0.9);
+    g.fillStyle = col(i / n);
+    g.beginPath();
+    g.roundRect ? g.roundRect(i * step + (step - bw) / 2, H - h, bw, h, bw / 2) : g.rect(i * step, H - h, bw, h);
+    g.fill();
+  }
+}
+
+function line() {
+  const gr = g.createLinearGradient(0, 0, W, 0);
+  gr.addColorStop(0, col(0)); gr.addColorStop(1, col(1));
+  g.strokeStyle = gr; g.lineWidth = 3 * D; g.lineJoin = 'round';
+  g.shadowBlur = 16 * D; g.shadowColor = col(0.5);
+  g.beginPath();
+  for (let i = 0; i < wave.length; i += 4) {
+    const x = i / wave.length * W, y = H / 2 + (wave[i] - 128) / 128 * H * 0.45;
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.stroke();
+}
+
+function ring() {
+  const cx = W / 2, cy = H / 2, m = Math.min(W, H), n = 96;
+  let bass = 0; for (let i = 0; i < 8; i++) bass += freq[i]; bass /= 8 * 255;
+  const r0 = m * 0.2 * (1 + bass * 0.35);
+  g.lineCap = 'round'; g.lineWidth = Math.max(2 * D, (Math.PI * 2 * r0 / n) * 0.55);
+  g.shadowBlur = 14 * D; g.shadowColor = col(0.5);
+  for (let i = 0; i < n; i++) {
+    const k = (i < n / 2 ? i : n - i) / (n / 2);
+    const v = freq[Math.floor(Math.pow(k, 1.6) * freq.length * 0.6)] / 255;
+    const a = i / n * Math.PI * 2 - Math.PI / 2, len = v * m * 0.3 + 2 * D;
+    g.strokeStyle = col(k);
+    g.beginPath();
+    g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+    g.lineTo(cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len));
+    g.stroke();
+  }
+}
+
+function draw() {
+  requestAnimationFrame(draw);
+  g.shadowBlur = 0;
+  g.fillStyle = 'rgba(13,13,20,.3)';
+  g.fillRect(0, 0, W, H);
+  if (!analyser) return;
+  analyser.getByteFrequencyData(freq);
+  analyser.getByteTimeDomainData(wave);
+  ({ bars, wave: line, ring })[mode]();
+}
+draw();
+
+// Memuat file
+const ok = f => f && (f.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|flac|aac|opus|weba)$/i.test(f.name));
+function load(f) {
+  const msg = $('#msg'); msg.textContent = '';
+  if (!ok(f)) { msg.textContent = 'File ini bukan audio. Pilih MP3, WAV, OGG, M4A, atau FLAC.'; return; }
+  setup();
+  if (url) URL.revokeObjectURL(url);
+  url = URL.createObjectURL(f);
+  audio.src = url;
+  $('#name').textContent = f.name;
+  $('#drop').classList.add('hide');
+  $('#play').disabled = false;
+  ctx.resume();
+  audio.play().catch(() => { msg.textContent = 'Tekan tombol putar untuk memulai.'; });
+}
+$('#file').onchange = e => { if (e.target.files[0]) load(e.target.files[0]); e.target.value = ''; };
+audio.onerror = () => { $('#msg').textContent = 'Format audio ini tidak bisa diputar di browser kamu. Coba MP3 atau WAV.'; };
+
+// Seret & lepas
+const stage = $('#stage');
+['dragenter', 'dragover'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('#drop').classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); $('#drop').classList.remove('over'); }));
+document.addEventListener('drop', e => { if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]); });
+
+// Kontrol pemutar
+const fmt = s => isFinite(s) ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
+const toggle = () => { if (!audio.src) return; ctx && ctx.resume(); audio.paused ? audio.play() : audio.pause(); };
+$('#play').onclick = toggle;
+audio.onplay = () => { $('#play').textContent = '❚❚'; $('#play').setAttribute('aria-label', 'Jeda'); };
+audio.onpause = audio.onended = () => { $('#play').textContent = '▶'; $('#play').setAttribute('aria-label', 'Putar'); };
+audio.onloadedmetadata = () => { $('#dur').textContent = fmt(audio.duration); };
+audio.ontimeupdate = () => {
+  $('#cur').textContent = fmt(audio.currentTime);
+  if (!seeking && audio.duration) $('#seek').value = audio.currentTime / audio.duration * 1000;
+};
+let seeking = false;
+$('#seek').oninput = e => { seeking = true; if (audio.duration) audio.currentTime = e.target.value / 1000 * audio.duration; };
+$('#seek').onchange = () => { seeking = false; };
+$('#vol').oninput = e => { audio.volume = +e.target.value; };
+$('#fs').onclick = () => { document.fullscreenElement ? document.exitFullscreen() : stage.requestFullscreen && stage.requestFullscreen(); };
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !/INPUT|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); toggle(); }
+});
+document.querySelector('label[for=file]').addEventListener('keydown', e => { if (e.key === 'Enter') $('#file').click(); });
+</script>
+</body>
+</html>
